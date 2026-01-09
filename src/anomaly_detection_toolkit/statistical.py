@@ -11,12 +11,19 @@ from .base import BaseDetector
 class StatisticalDetector(BaseDetector):
     """Base class for statistical anomaly detectors."""
 
+    def __init__(self, random_state: Optional[int] = None):
+        """Initialize the statistical detector."""
+        super().__init__(random_state)
+        self.threshold: Optional[float] = None
+
     def fit(self, X: Union[np.ndarray, pd.DataFrame, pd.Series]):
         """Fit the detector (no training needed for statistical methods)."""
         pass
 
     def predict(self, X: Union[np.ndarray, pd.DataFrame, pd.Series]) -> np.ndarray:
         """Predict anomalies."""
+        if self.threshold is None:
+            raise ValueError("Detector must be fitted before prediction.")
         scores = self.score_samples(X)
         predictions = np.where(scores > self.threshold, -1, 1)
         return predictions
@@ -223,12 +230,11 @@ class SeasonalBaselineDetector(BaseDetector):
         df["seasonal_key"] = self._get_seasonal_key(df[date_col])
 
         # Compute seasonal statistics
-        self.seasonal_stats_ = (
-            df.groupby("seasonal_key").agg({value_col: ["mean", "std"]}).reset_index()
-        )
-        self.seasonal_stats_.columns = ["seasonal_key", "mean", "std"]
-        self.seasonal_stats_["std"] = self.seasonal_stats_["std"].fillna(0)
-        self.seasonal_stats_["std"] = self.seasonal_stats_["std"].replace(0, 1.0)
+        seasonal_stats = df.groupby("seasonal_key").agg({value_col: ["mean", "std"]}).reset_index()
+        seasonal_stats.columns = ["seasonal_key", "mean", "std"]
+        seasonal_stats["std"] = seasonal_stats["std"].fillna(0)
+        seasonal_stats["std"] = seasonal_stats["std"].replace(0, 1.0)
+        self.seasonal_stats_ = seasonal_stats
 
     def predict(
         self, data: pd.DataFrame, date_col: str = "date", value_col: str = "value"
@@ -282,6 +288,8 @@ class SeasonalBaselineDetector(BaseDetector):
         df["seasonal_key"] = self._get_seasonal_key(df[date_col])
 
         # Merge with seasonal stats - vectorized pandas operation
+        if self.seasonal_stats_ is None:
+            raise ValueError("Detector must be fitted before scoring.")
         df = df.merge(self.seasonal_stats_, on="seasonal_key", how="left")
 
         # Compute Z-scores - vectorized

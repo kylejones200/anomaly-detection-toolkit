@@ -9,6 +9,7 @@ from sklearn.preprocessing import MinMaxScaler
 from .base import BaseDetector
 
 # Optional imports for deep learning methods
+# Use string forward references in type hints to avoid runtime import issues
 try:
     import torch
     import torch.nn as nn
@@ -16,6 +17,8 @@ try:
     TORCH_AVAILABLE = True
 except ImportError:
     TORCH_AVAILABLE = False
+    torch = None  # type: ignore[assignment,misc]
+    nn = None  # type: ignore[assignment,misc]
 
 try:
     from keras.callbacks import EarlyStopping
@@ -25,6 +28,12 @@ try:
     KERAS_AVAILABLE = True
 except ImportError:
     KERAS_AVAILABLE = False
+    EarlyStopping = None  # type: ignore[assignment,misc]
+    LSTM = None  # type: ignore[assignment,misc]
+    Dense = None  # type: ignore[assignment,misc]
+    RepeatVector = None  # type: ignore[assignment,misc]
+    TimeDistributed = None  # type: ignore[assignment,misc]
+    Sequential = None  # type: ignore[assignment,misc]
 
 
 class LSTMAutoencoderDetector(BaseDetector):
@@ -63,7 +72,7 @@ class LSTMAutoencoderDetector(BaseDetector):
         random_state: Optional[int] = None,
     ):
         super().__init__(random_state)
-        if not KERAS_AVAILABLE:
+        if not KERAS_AVAILABLE or Sequential is None:
             raise ImportError(
                 "Keras/TensorFlow is required for LSTM autoencoder. "
                 "Install with: pip install tensorflow"
@@ -96,8 +105,13 @@ class LSTMAutoencoderDetector(BaseDetector):
         # Add feature dimension for LSTM input shape
         return windows[:, :, np.newaxis]
 
-    def _create_model(self, input_shape: Tuple[int, int]) -> Sequential:
+    def _create_model(self, input_shape: Tuple[int, int]) -> "Sequential":
         """Create LSTM autoencoder model."""
+        if not KERAS_AVAILABLE or Sequential is None:
+            raise ImportError("Keras/TensorFlow is required.")
+        if LSTM is None or Dense is None or RepeatVector is None or TimeDistributed is None:
+            raise ImportError("Keras/TensorFlow is required.")
+
         model = Sequential(
             [
                 LSTM(
@@ -125,7 +139,7 @@ class LSTMAutoencoderDetector(BaseDetector):
         X : array-like of shape (n_samples,)
             Training time series data.
         """
-        if not KERAS_AVAILABLE:
+        if not KERAS_AVAILABLE or Sequential is None or EarlyStopping is None:
             raise ImportError("Keras/TensorFlow is required.")
 
         X = self._validate_input(X)
@@ -145,6 +159,10 @@ class LSTMAutoencoderDetector(BaseDetector):
 
         # Create and train model
         self.model_ = self._create_model((self.window_size, 1))
+        if self.model_ is None:
+            raise RuntimeError("Failed to create model.")
+        if EarlyStopping is None:
+            raise ImportError("Keras/TensorFlow is required.")
 
         early_stopping = EarlyStopping(
             monitor="val_loss", patience=5, restore_best_weights=True, verbose=0
@@ -260,9 +278,9 @@ class PyTorchAutoencoderDetector(BaseDetector):
         random_state: Optional[int] = None,
     ):
         super().__init__(random_state)
-        if not TORCH_AVAILABLE:
+        if not TORCH_AVAILABLE or torch is None or nn is None:
             raise ImportError(
-                "PyTorch is required for PyTorch autoencoder. " "Install with: pip install torch"
+                "PyTorch is required for PyTorch autoencoder. Install with: pip install torch"
             )
 
         self.window_size = window_size
@@ -272,11 +290,15 @@ class PyTorchAutoencoderDetector(BaseDetector):
         self.batch_size = batch_size
         self.threshold_std = threshold_std
         self.model_ = None
-        self.device_ = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        self.device_ = None
         self.reconstruction_errors_ = None
+        self.X_mean_ = None
+        self.X_std_ = None
 
-        if self.random_state is not None:
-            torch.manual_seed(self.random_state)
+        if TORCH_AVAILABLE and torch is not None:
+            self.device_ = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+            if self.random_state is not None:
+                torch.manual_seed(self.random_state)
 
     def _create_windows(self, data: np.ndarray) -> np.ndarray:
         """Create sliding windows from time series using vectorized approach."""
@@ -293,8 +315,10 @@ class PyTorchAutoencoderDetector(BaseDetector):
         # Copy to avoid memory issues with strided view
         return windows.copy()
 
-    def _create_model(self, input_dim: int) -> nn.Module:
+    def _create_model(self, input_dim: int) -> "nn.Module":
         """Create PyTorch autoencoder model."""
+        if not TORCH_AVAILABLE or torch is None or nn is None:
+            raise ImportError("PyTorch is required.")
 
         class Autoencoder(nn.Module):
             def __init__(self, input_dim, hidden_dims):
@@ -332,7 +356,7 @@ class PyTorchAutoencoderDetector(BaseDetector):
         X : array-like of shape (n_samples,)
             Training time series data.
         """
-        if not TORCH_AVAILABLE:
+        if not TORCH_AVAILABLE or torch is None or nn is None:
             raise ImportError("PyTorch is required.")
 
         X = self._validate_input(X)
@@ -360,10 +384,16 @@ class PyTorchAutoencoderDetector(BaseDetector):
 
         # Create model
         self.model_ = self._create_model(self.window_size)
+        if self.model_ is None:
+            raise RuntimeError("Failed to create model.")
+        if not TORCH_AVAILABLE or torch is None or nn is None:
+            raise ImportError("PyTorch is required.")
         optimizer = torch.optim.Adam(self.model_.parameters(), lr=self.learning_rate)
         loss_fn = nn.MSELoss()
 
         # Convert to tensors
+        if torch is None:
+            raise ImportError("PyTorch is required.")
         from torch.utils.data import DataLoader, TensorDataset
 
         dataset = TensorDataset(torch.from_numpy(X_train).float())
@@ -432,8 +462,16 @@ class PyTorchAutoencoderDetector(BaseDetector):
         if X.ndim > 1:
             X = X.flatten()
 
-        # Normalize
-        X_normalized = (X - self.X_mean_) / self.X_std_
+        # Normalize (defensive check for stored normalization params)
+        if (
+            not hasattr(self, "X_mean_")
+            or not hasattr(self, "X_std_")
+            or self.X_mean_ is None
+            or self.X_std_ is None
+        ):
+            raise ValueError("Detector must be fitted before scoring.")
+        X_std = self.X_std_ if self.X_std_ > 0 else 1.0
+        X_normalized = (X - self.X_mean_) / X_std
 
         # Create windows
         X_windows = self._create_windows(X_normalized)
@@ -441,6 +479,13 @@ class PyTorchAutoencoderDetector(BaseDetector):
             return np.zeros(len(X))
 
         # Compute reconstruction errors
+        if self.model_ is None:
+            raise ValueError("Detector must be fitted before scoring.")
+        if not TORCH_AVAILABLE or torch is None:
+            raise ImportError("PyTorch is required.")
+        if self.device_ is None:
+            raise RuntimeError("Device not initialized. PyTorch may not be available.")
+
         self.model_.eval()
         with torch.no_grad():
             X_tensor = torch.from_numpy(X_windows).float().to(self.device_)
