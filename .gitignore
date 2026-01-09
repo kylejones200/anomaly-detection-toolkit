@@ -83,3 +83,8 @@ results/
 bandit-report.json
 .mypy_cache/
 .ruff_cache/
+
+# Sphinx documentation
+docs/_build/
+docs/_static/
+docs/_templates/

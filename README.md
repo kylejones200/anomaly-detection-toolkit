@@ -4,6 +4,9 @@ A comprehensive Python library for detecting anomalies in time series and multiv
 
 [![Python 3.12+](https://img.shields.io/badge/python-3.12+-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![Documentation](https://readthedocs.org/projects/anomaly-detection-toolkit/badge/?version=latest)](https://anomaly-detection-toolkit.readthedocs.io/en/latest/?badge=latest)
+
+**📚 [Full Documentation](https://anomaly-detection-toolkit.readthedocs.io/)**
 
 ## Features
 
@@ -37,6 +40,14 @@ pip install anomaly-detection-toolkit[deep]
 git clone https://github.com/kylejones200/anomaly-detection-toolkit.git
 cd anomaly-detection-toolkit
 pip install -e ".[deep]"
+```
+
+### Building Documentation
+
+```bash
+pip install -e ".[docs]"
+cd docs
+make html
 ```
 
 ## Quick Start
