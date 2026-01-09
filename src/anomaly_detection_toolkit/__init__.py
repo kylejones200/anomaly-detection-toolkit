@@ -5,7 +5,7 @@ Supports multiple detection methods including statistical, machine learning, and
 approaches.
 """
 
-__version__ = "0.1.0"
+__version__ = "0.1.1"
 __author__ = "Kyle Jones"
 __email__ = "kyletjones@gmail.com"
 
