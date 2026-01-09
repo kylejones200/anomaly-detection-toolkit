@@ -1,49 +1,24 @@
-name: Publish to PyPI
+name: publish
 
 on:
-  release:
-    types: [published]
   push:
     tags:
-      - "v*"  # Trigger on version tags (e.g., v0.1.0, v1.0.0)
-  workflow_dispatch:
-    inputs:
-      version:
-        description: 'Version to publish (leave empty to use existing version)'
-        required: false
-        type: string
+      - "v*"
+
+permissions:
+  id-token: write
+  contents: read
 
 jobs:
   build-and-publish:
-    name: Build and publish to PyPI
     runs-on: ubuntu-latest
-    permissions:
-      id-token: write  # Required for OIDC
-      contents: read   # Required for repository access
-
+    environment:
+      name: pypi
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Set up Python
-        uses: actions/setup-python@v5
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-
-      - name: Install build dependencies
-        run: |
-          python -m pip install --upgrade pip
-          pip install build twine
-
-      - name: Build package
-        run: |
-          python -m build
-
-      - name: Check package
-        run: |
-          python -m twine check dist/*
-
-      - name: Publish to PyPI
-        uses: pypa/gh-action-pypi-publish@release/v1
-        with:
-          packages-dir: dist/
+      - run: python -m pip install --upgrade pip build
+      - run: python -m build
+      - uses: pypa/gh-action-pypi-publish@release/v1
