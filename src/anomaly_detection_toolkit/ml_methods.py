@@ -155,8 +155,12 @@ class LOFDetector(BaseDetector):
         X = self._validate_input(X)
         X_scaled = self.scaler_.fit_transform(X)
 
+        # Set novelty=True to enable predict() method for new data
         self.model_ = LocalOutlierFactor(
-            contamination=self.contamination, n_neighbors=self.n_neighbors, n_jobs=self.n_jobs
+            contamination=self.contamination,
+            n_neighbors=self.n_neighbors,
+            n_jobs=self.n_jobs,
+            novelty=True,
         )
         self.model_.fit(X_scaled)
 
