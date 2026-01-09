@@ -15,6 +15,8 @@ A comprehensive Python library for detecting anomalies in time series and multiv
 - **Wavelet Methods**: Wavelet decomposition and denoising for time series
 - **Deep Learning**: LSTM and PyTorch autoencoders for anomaly detection
 - **Ensemble Methods**: Voting and score combination ensembles
+- **Predictive Maintenance**: RUL estimation, failure prediction, feature extraction, alert systems
+- **Visualization**: Publication-ready plots with optional signalplot integration
 - **Easy to Use**: Scikit-learn compatible API
 - **Well Documented**: Comprehensive docstrings and examples
 
@@ -32,6 +34,14 @@ For LSTM and PyTorch autoencoders:
 
 ```bash
 pip install anomaly-detection-toolkit[deep]
+```
+
+### With Enhanced Visualizations
+
+For publication-ready plots using [signalplot](https://github.com/kylejones200/signalplot):
+
+```bash
+pip install anomaly-detection-toolkit[viz]
 ```
 
 ### Development Installation
@@ -189,6 +199,148 @@ ensemble.fit(X)
 predictions, scores = ensemble.fit_predict(X)
 ```
 
+### Predictive Maintenance
+
+```python
+from anomaly_detection_toolkit.predictive_maintenance import (
+    FeatureExtractor,
+    RULEstimator,
+    FailureClassifier,
+    AlertSystem,
+    PredictiveMaintenanceSystem,
+)
+from anomaly_detection_toolkit.statistical import ZScoreDetector
+import pandas as pd
+import numpy as np
+
+# Extract features from time series
+extractor = FeatureExtractor(rolling_windows=[5, 10, 20, 50])
+features = extractor.extract(sensor_data)
+
+# Train RUL estimator
+rul_estimator = RULEstimator(method="regression", random_state=42)
+rul_estimator.fit(train_features, train_rul_values)
+rul_predictions = rul_estimator.predict(test_features)
+
+# Train failure classifier
+failure_classifier = FailureClassifier(random_state=42)
+failure_classifier.fit(train_features, train_failure_labels)
+failure_proba = failure_classifier.predict_proba(test_features)
+
+# Set up alert system
+thresholds = {
+    "temperature_rolling_mean_10": {
+        "warning": 80.0,
+        "critical": 90.0,
+        "failure": 100.0,
+    }
+}
+alert_system = AlertSystem(thresholds=thresholds)
+
+# Create complete predictive maintenance system
+pm_system = PredictiveMaintenanceSystem(
+    feature_extractor=extractor,
+    rul_estimator=rul_estimator,
+    failure_classifier=failure_classifier,
+    alert_system=alert_system,
+    anomaly_detector=ZScoreDetector(n_std=2.5),
+)
+
+# Process new data
+results = pm_system.process(
+    new_sensor_data,
+    timestamp=pd.Timestamp.now(),
+    asset_id="EQUIPMENT_001",
+)
+
+print(f"RUL: {results['rul']} hours")
+print(f"Failure probability: {results['failure_probability']:.3f}")
+print(f"Alerts: {len(results['alerts'])}")
+```
+
+#### Complete PM Workflow with Feature Engineering
+
+```python
+from anomaly_detection_toolkit.predictive_maintenance import (
+    prepare_pm_features,
+    calculate_rul,
+    create_rul_labels,
+    RULEstimator,
+)
+import pandas as pd
+
+# Load PM data with asset_id, cycle, and sensor columns
+df = pd.read_csv('pm_data.csv')
+
+# Prepare all features in one step
+df = prepare_pm_features(
+    df=df,
+    asset_id_col="asset_id",
+    cycle_col="cycle",
+    feature_cols=None,  # Auto-detect sensor columns
+    calculate_rul_flag=True,
+    add_labels=True,
+    add_rolling_stats=True,
+    add_degradation_rates=False,
+    rolling_window=5,
+    warning_threshold=30,
+    critical_threshold=15,
+)
+
+# Split by asset for train/test
+asset_ids = df['asset_id'].unique()
+train_assets = asset_ids[:int(len(asset_ids) * 0.8)]
+test_assets = asset_ids[int(len(asset_ids) * 0.8):]
+
+train_df = df[df['asset_id'].isin(train_assets)]
+test_df = df[df['asset_id'].isin(test_assets)]
+
+# Train RUL estimator
+feature_cols = [col for col in df.columns
+                if col not in ['asset_id', 'cycle', 'RUL', 'health_status']]
+rul_estimator = RULEstimator(method="regression", random_state=42)
+rul_estimator.fit(train_df[feature_cols], train_df['RUL'])
+
+# Predict RUL
+rul_predictions = rul_estimator.predict(test_df[feature_cols])
+```
+
+#### Real-time Monitoring and Dashboard
+
+```python
+from anomaly_detection_toolkit.predictive_maintenance import (
+    RealTimeIngestion,
+    DashboardVisualizer,
+    PredictiveMaintenanceSystem,
+)
+
+# Set up PM system (with trained models)
+pm_system = PredictiveMaintenanceSystem(...)
+
+# Create real-time ingestion
+ingestion = RealTimeIngestion(pm_system=pm_system, window_size=100)
+
+# Ingest streaming data
+for sensor_reading in sensor_stream:
+    result = ingestion.ingest(
+        data=sensor_reading,
+        asset_id="EQUIPMENT_001",
+        sensor_name="temperature",
+    )
+
+    if result.get("alerts"):
+        print(f"Alert: {result['alerts']}")
+
+# Get results history and create dashboard
+results_history = {
+    asset_id: ingestion.get_latest_results(asset_id, n=1000)
+    for asset_id in ingestion.get_all_assets()
+}
+
+visualizer = DashboardVisualizer()
+fig = visualizer.create_dashboard(results_history, save_path="dashboard.png")
+```
+
 ## API Reference
 
 ### Statistical Methods
@@ -202,6 +354,7 @@ predictions, scores = ensemble.fit_predict(X)
 - **IsolationForestDetector**: Isolation Forest anomaly detection
 - **LOFDetector**: Local Outlier Factor (LOF) anomaly detection
 - **RobustCovarianceDetector**: Robust Covariance (Elliptic Envelope) anomaly detection
+- **PCADetector**: PCA-based anomaly detection with Mahalanobis distance or reconstruction error
 
 ### Wavelet Methods
 
@@ -218,14 +371,34 @@ predictions, scores = ensemble.fit_predict(X)
 - **VotingEnsemble**: Voting ensemble that combines predictions from multiple detectors
 - **EnsembleDetector**: General ensemble detector with customizable combination methods
 
+### Predictive Maintenance
+
+- **FeatureExtractor**: Extract rolling statistics, change detection, and frequency domain features
+- **RULEstimator**: Estimate Remaining Useful Life (RUL) for assets
+- **FailureClassifier**: Classify normal vs. failure states
+- **AlertSystem**: Threshold-based alert system with escalation rules
+- **PredictiveMaintenanceSystem**: Complete system integrating all components
+- **RealTimeIngestion**: Real-time data ingestion system for streaming PM data
+- **DashboardVisualizer**: Dashboard visualization utilities for PM monitoring
+
+#### Utility Functions
+
+- **calculate_rul**: Calculate Remaining Useful Life from asset cycle data
+- **create_rul_labels**: Create health status labels (healthy, warning, critical, failed) from RUL
+- **add_rolling_statistics**: Add rolling window statistics grouped by asset
+- **add_degradation_rates**: Add degradation rate features (rate of change)
+- **prepare_pm_features**: Complete feature engineering pipeline for PM data
+
 ## Examples
 
 See the `examples/` directory for complete examples:
 
-- `examples/statistical_example.py`: Statistical methods
-- `examples/ml_example.py`: Machine learning methods
+- `examples/basic_example.py`: Basic usage examples
 - `examples/time_series_example.py`: Time series anomaly detection
-- `examples/ensemble_example.py`: Ensemble methods
+- `examples/predictive_maintenance_example.py`: Predictive maintenance features
+- `examples/pm_workflow_example.py`: Complete PM workflow with feature engineering and RUL forecasting
+- `examples/realtime_pm_example.py`: Real-time data ingestion and dashboard visualization
+- `examples/pca_vs_lstm_comparison.py`: PCA vs LSTM comparison for turbomachinery anomaly detection
 
 ## Development
 
